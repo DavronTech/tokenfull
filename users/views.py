@@ -1,65 +1,79 @@
-from django.contrib.auth import authenticate
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
-from .models import User
-from .serilazers import SignUpSerilazers,LoginSerilazers,ProfileSerializer
+from .serilazers import SignUpSerilazers,LoginSerilazers,ProfileSerializer,LogoutSerializer, PasswordChangeSerializer
 
 
 
 class SigUpView(APIView):
+
     def post(self, request):
-        serilazer = SignUpSerilazers(data=request.data)
-        serilazer.is_valid(raise_exception=True)
-        serilazer.validated_data.pop('confirm_password')
-        user = User.objects.create_user(**serilazer.validated_data)
+        serializer = SignUpSerilazers(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
 
-
-        return Response({
-            'msg': 'signup',
-            'user': SignUpSerilazers(user).data
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                'msg': 'Signup successful',
+                'user': SignUpSerilazers(user).data
+            },status=status.HTTP_201_CREATED
+        )
 
 
 class LoginView(APIView):
 
     def post(self, request):
+
         serializer = LoginSerilazers(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        username = serializer.validated_data['username']
-        password = serializer.validated_data['password']
-
-        user = authenticate(
-            username=username,
-            password=password
-        )
-
-        if user is None:
-            return Response(
-                {'error': 'Username yoki password noto‘g‘ri'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-
-        token, created = Token.objects.get_or_create(user=user)
-
         return Response({
-            'token': token.key
+            'msg': 'Login successful',
+            'token': serializer.validated_data['token']
         })
+
 
 class ProfileView(APIView):
 
-    def get(self, request):
-        user = request.user
+    permission_classes = [IsAuthenticated]
 
-        serializer = ProfileSerializer(user)
+    def get(self, request):
+        serializer = ProfileSerializer(request.user)
 
         return Response(
             serializer.data,
             status=status.HTTP_200_OK
         )
+
+    def put(self, request):
+
+        serializer = ProfileSerializer(request.user,data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(serializer.data,status=status.HTTP_200_OK)
+
+    def patch(self, request):
+
+        serializer = ProfileSerializer(request.user,data=request.data,partial=True)
+        serializer.is_valid( raise_exception=True)
+        serializer.save()
+
+        return Response(serializer.data,status=status.HTTP_200_OK)
+
+class PasswordChangeView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data,context={'request': request })
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response({
+            'msg': 'Password changed successfully'
+        }, status=status.HTTP_200_OK)
 
 
 class LogoutView(APIView):
@@ -68,7 +82,9 @@ class LogoutView(APIView):
 
     def post(self, request):
 
-        request.auth.delete()
+        serializer = LogoutSerializer(data={},context={ 'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
 
         return Response(
             {
